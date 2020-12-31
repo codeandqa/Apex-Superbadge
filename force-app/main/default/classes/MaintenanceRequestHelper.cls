@@ -1,47 +1,32 @@
 public with sharing class MaintenanceRequestHelper {
 
     public static void createRoutineMaintenance(List<Case> caseList) {
-
-        Map<String, Integer> caseVsDueDate = dueDates(caseList);
-
+        Map<String, Integer> caseVsDueDate = getDueDate(caseList);
         List<Case> newMaintRequest = new List<Case>();
-        for(Case case: caseList){
-        Case c = new Case(  Type   = 'Routine Maintenance',
-                            Status  = 'New',
-                            Origin = 'Web',
-                            Subject= 'Routine Maintenance as per policy',
-                            Vehicle = case.Vehicle__c,
-                            Equipment__c = c.Equipment__c,
-                            Date_Reported__c=Date.today(),
-                            If(caseVsDueDate.get(c.Id) !=null){
-                            Date_Due__c = Date.today().addDays(caseVsDueDate.get(c.Id));
-                            }else{
-                            Date_Due__c = Date.today().addDays(caseVsDueDate.get(c.Id));
-                            }
-        );
-        newMaintRequest.add(c);
+        for(Case myCase : caseList){
+
+            Case c = new Case();
+            c.Type             = 'Routine Maintenance';
+            c.Status           = 'New';
+            c.Origin           = 'Web';
+            c.Subject          = 'Routine Maintenance as per policy'+myCase.Id;
+            c.Vehicle__c       = [SELECT Vehicle__c FROM Case WHERE id= :myCase.Id].get(0).Vehicle__c;
+            c.Date_Reported__c = Date.today();
+            c.Date_Due__c      = (caseVsDueDate.get(myCase.Id) ==null)? Date.today() : Date.today().addDays(caseVsDueDate.get(myCase.Id));
+            newMaintRequest.add(c);
         }
         insert newMaintRequest;
     }
-    private static Map<String, Integer> getDueDate(List<Case> caseList){
-        // Case firstCase = caseList.get(0);//5004x0000031Fq8AAE
-        // firstCase = '5004x0000031Fq8AAE';
-        //SELECT ID,Name,Equipment__c, Maintenance_Request__c FROM Equipment_Maintenance_Item__c
-        //SELECT ID, NAME, (SELECT Id FROM Equipment_Maintenance_Items__r)FROM  Product2
-        //SELECT CaseNumber,Subject, (SELECT ID, Name, equipment__C from Equipment_Maintenance_Items__r) FROM Case
-        //Map to returnfor all cases. 
+    public static Map<String, Integer> getDueDate(List<Case> caseList){
         Map<String, Integer> dueDates = new Map<String, Integer>();
-        //Assume I am passing all cases. 
-        //List<Case> caseList = [SELECT Id, CaseNumber,Subject FROM Case];
-        //Convert cases into map of Id and case.
         Map<Id, Case> mapcase = new Map<Id, Case>(caseList);
         Map<String, Integer> mapOfCaseAndDueDate = new Map<String,Integer>();
         for(Case c:[SELECT ID, (SELECT ID, NAME, equipment__C  FROM Equipment_Maintenance_Items__r) FROM Case WHERE Id IN :mapcase.keySet()]){
-                for(Equipment_Maintenance_Item__c e: c.Equipment_Maintenance_Items__r){
+                //for(Equipment_Maintenance_Item__c e: c.Equipment_Maintenance_Items__r){
                     AggregateResult[] average = [SELECT MIN(Maintenance_Cycle__c) FROM Product2 WHERE Replacement_Part__c=true];
                     dueDates.put((String)c.Id, Integer.valueOf(average[0].get('expr0')));
-                }
+                //}
             }
-            return dueDates;
+        return dueDates;
     }
 }
