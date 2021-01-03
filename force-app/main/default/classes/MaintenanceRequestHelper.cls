@@ -1,52 +1,60 @@
 public with sharing class MaintenanceRequestHelper {
-
-    public static void createRoutineMaintenance(List<Case> caseList) {
-        //TODO: NEED TO FIX: System.LimitException: Too many SOQL queries: 101
-        Map<String, Integer> caseVsDueDate = getDueDate(caseList);
-        List<sObject> newMaintRequest = new List<sObject>();
-        //==============Handling Equipment Info===================//
-        Map<Id, List<Equipment_Maintenance_Item__c>> emtCaseIDmap = new Map<Id, List<Equipment_Maintenance_Item__c>>();
-
-        for(Case c:[SELECT ID, (SELECT ID, NAME, equipment__C,Quantity__c  FROM Equipment_Maintenance_Items__r) FROM Case WHERE Id IN :caseVsDueDate.keySet()])
-        {
-            List<Equipment_Maintenance_Item__c> emtIds = new List<Equipment_Maintenance_Item__c>();
-            for(Equipment_Maintenance_Item__c e: c.Equipment_Maintenance_Items__r)
-            {
-                emtIds.add(e);
+    
+    public static void updateWorkOrders(List<Case> caseList) {
+        // TODO: Complete the method to update workorders
+        List<case> newCases = new List<Case>();
+        Map<String,Integer> result=getDueDate(caseList);
+        List<Id> clonedCaseIds = new List<Id>();
+        List<Equipment_Maintenance_Item__c> newItems = new List<Equipment_Maintenance_Item__c>();
+		
+        for(Case c : caseList){
+            if(c.status=='Closed')
+                if(c.type=='Repair' || c.type=='Routine Maintenance'){
+                    Case newCase = new Case();
+                    newCase.Status='New';
+                    newCase.Origin='web';
+                    newCase.Type='Routine Maintenance';
+                    newCase.Subject='Routine Maintenance of Vehicle';
+                    newCase.Vehicle__c=c.Vehicle__c;
+                    newCase.Master_Id__c = c.Id;
+                    newCase.Date_Reported__c=Date.today();
+                    if(result.get(c.Id)!=null)
+                        newCase.Date_Due__c=Date.today()+result.get(c.Id);
+                    else
+                        newCase.Date_Due__c=Date.today();
+                    newCases.add(newCase);
+                    clonedCaseIds.add(c.Id);
+                }
+        }        
+        insert newCases;   
+        
+        List<Equipment_Maintenance_Item__c> items=
+            [select id,name,Maintenance_Request__c from Equipment_Maintenance_Item__c where Maintenance_Request__c in:clonedCaseIds];
+        
+        for(Case caseO : newCases){
+            
+            for(Equipment_Maintenance_Item__c item : items){
+                if(caseO.Master_Id__c==item.Maintenance_Request__c){
+                    Equipment_Maintenance_Item__c newItem = new Equipment_Maintenance_Item__c();
+                    newItem.Maintenance_Request__c=caseO.Id;
+                    newItems.add(newItem);
+                }
             }
-            emtCaseIDmap.put(c.Id, emtIds);
         }
-        //===========
-        for(Case myCase : caseList){
-            Case c = new Case();
-            c.Type             = 'Routine Maintenance';
-            c.Status           = 'New';
-            c.Origin           = 'Web';
-            c.Subject          = 'Routine Maintenance as per policy';
-            c.Master_Id__c     = 'NewItems';
-            c.Vehicle__c       = [SELECT Vehicle__c FROM Case WHERE id= :myCase.Id].get(0).Vehicle__c;
-            c.Date_Reported__c = Date.today();
-            c.Date_Due__c      = (caseVsDueDate.get(myCase.Id) ==null)? Date.today() : Date.today().addDays(caseVsDueDate.get(myCase.Id));
-            insert c;
-            List<Equipment_Maintenance_Item__c> lstEMI = [SELECT equipment__C, Quantity__c FROM Equipment_Maintenance_Item__c WHERE Maintenance_Request__c=:myCase.Id];
-            for(Equipment_Maintenance_Item__c e: lstEmI){
-                Equipment_Maintenance_Item__c cont= new Equipment_Maintenance_Item__c(equipment__C=e.equipment__C,Quantity__c=e.Quantity__c,Maintenance_Request__c=c.Id);
-                newMaintRequest.add(cont);
-            }
-            insert newMaintRequest;
+        insert newItems;
+    }        
+    
+    public static Map<String,Integer> getDueDate(List<Case> CaseIDs){
+        Map<String,Integer> result = new Map<String,Integer>();
+        Map<Id, case> caseKeys = new Map<Id, case> (CaseIDs);        
+        List<AggregateResult> wpc=[select Maintenance_Request__r.ID cID,min(Equipment__r.Maintenance_Cycle__c)cycle
+                                   from Equipment_Maintenance_Item__c where  Maintenance_Request__r.ID in :caseKeys.keySet() group by  Maintenance_Request__r.ID ];
+        for(AggregateResult res :wpc){
+            Integer addDays=0;
+            if(res.get('cycle')!=null)
+                addDays+=Integer.valueOf(res.get('cycle'));
+            result.put((String)res.get('cID'),addDays);
         }
-        //insert newMaintRequest;
-    }
-    public static Map<String, Integer> getDueDate(List<Case> caseList){
-        Map<String, Integer> dueDates = new Map<String, Integer>();
-        Map<Id, Case> mapcase = new Map<Id, Case>(caseList);
-        Map<String, Integer> mapOfCaseAndDueDate = new Map<String,Integer>();
-        for(Case c:[SELECT ID, (SELECT ID, NAME, equipment__C  FROM Equipment_Maintenance_Items__r) FROM Case WHERE Id IN :mapcase.keySet()]){
-                //for(Equipment_Maintenance_Item__c e: c.Equipment_Maintenance_Items__r){
-                    AggregateResult[] average = [SELECT MIN(Maintenance_Cycle__c) FROM Product2 WHERE Replacement_Part__c=true];
-                    dueDates.put((String)c.Id, Integer.valueOf(average[0].get('expr0')));
-                //}
-            }
-        return dueDates;
+        return result;
     }
 }
