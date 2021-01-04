@@ -11,7 +11,6 @@ public with sharing class WarehouseCalloutService implements Queueable, Database
         HttpResponse response   = http.send(request);
         if (response.getStatusCode() == 200) {
             List<Object> equipments = (List<Object>) JSON.deserializeUntyped(response.getBody());
-            
             System.debug('Received the following equipments:');
             for (Object equipment: equipments) {
                 Map<String,Object> mp_StrObj    = (Map<string,Object>)equipment;
