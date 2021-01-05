@@ -1,6 +1,7 @@
-public with sharing class WarehouseCalloutService implements Queueable, Database.AllowsCallouts {
+public with sharing class WarehouseCalloutService {
 
-    public void execute(QueueableContext context) {
+    @future(callout=true)
+    public static void syncWarehouseData() {
         List<Product2> prodList             = new List<Product2>();
         List<Map<String,Object>> listOfMaps = new List<Map<String,Object>>();
 
@@ -15,15 +16,15 @@ public with sharing class WarehouseCalloutService implements Queueable, Database
             for (Object equipment: equipments) {
                 Map<String,Object> mp_StrObj    = (Map<string,Object>)equipment;
                 Product2 product                = new Product2();
+                product.ProductCode             = String.valueOf(mp_StrObj.get('_id'));
                 product.Name                    = String.valueOf(mp_StrObj.get('name'));
-                product.Replacement_Part__c     = true;
+                product.Replacement_Part__c     = Boolean.valueOf(mp_StrObj.get('replacement'));
                 product.Cost__c                 = Integer.ValueOf(mp_StrObj.get('cost'));
                 product.Current_Inventory__c    = Integer.ValueOf(mp_StrObj.get('quantity'));
                 product.Lifespan_Months__c      =  Integer.ValueOf(mp_StrObj.get('lifespan'));
                 product.Maintenance_Cycle__c    = Integer.ValueOf(mp_StrObj.get('maintenanceperiod'));
                 product.Warehouse_SKU__c        = String.valueOf(mp_StrObj.get('sku'));
                 prodList.add(product);
-                
             }
             upsert prodList;
         }
